@@ -6,7 +6,10 @@ android{
  composeOptions{kotlinCompilerExtensionVersion="1.5.14"}
  compileOptions{sourceCompatibility=JavaVersion.VERSION_17;targetCompatibility=JavaVersion.VERSION_17}
  kotlinOptions{jvmTarget="17"}
- buildTypes{release{isMinifyEnabled=false}}
+ signingConfigs{create("release"){
+  System.getenv("KEYSTORE_FILE")?.let{storeFile=file(it);storePassword=System.getenv("KEYSTORE_PASSWORD");keyAlias=System.getenv("KEY_ALIAS");keyPassword=System.getenv("KEY_PASSWORD")}
+ }}
+ buildTypes{release{isMinifyEnabled=false;if(System.getenv("KEYSTORE_FILE")!=null)signingConfig=signingConfigs.getByName("release")}}
 }
 dependencies{
  implementation(platform("androidx.compose:compose-bom:2024.06.00"))

@@ -2,8 +2,8 @@ package ir.roozshomar
 
 import android.content.Context
 import android.icu.util.Calendar
-import android.icu.util.PersianCalendar
 import android.icu.util.TimeZone
+import android.icu.util.ULocale
 import androidx.compose.runtime.*
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -18,13 +18,14 @@ val FL = listOf("master","period","ovu","log","tips","discreet","bio","pms","wde
 fun fa(n: Int) = n.toString().map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")
 
 private val UTC = TimeZone.getTimeZone("UTC")
+private fun pc(): Calendar = Calendar.getInstance(UTC, ULocale("fa_IR@calendar=persian"))
 fun jal(dn: Long): Triple<Int, Int, Int> {
-    val c = PersianCalendar(UTC); c.timeInMillis = dn * 86400000L + 43200000L
+    val c = pc(); c.timeInMillis = dn * 86400000L + 43200000L
     return Triple(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
 }
 fun jdate(dn: Long): String { val (y, m, d) = jal(dn); return "${fa(d)} ${MN[m - 1]} ${fa(y)}" }
 fun monthStart(y: Int, m: Int): Pair<Long, Int> {
-    val c = PersianCalendar(UTC); c.clear(); c.set(y, m - 1, 1)
+    val c = pc(); c.clear(); c.set(y, m - 1, 1)
     return Pair(c.timeInMillis / 86400000L, c.getActualMaximum(Calendar.DAY_OF_MONTH))
 }
 
