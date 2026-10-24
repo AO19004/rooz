@@ -4,6 +4,7 @@ import android.Manifest
 import android.os.Build
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,12 +30,15 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import java.time.LocalDate
 
-val PINK = Color(0xFFD6336C); val GREEN = Color(0xFF2F9E6E)
+val PINK = Color(0xFFD6336C); val GREEN = Color(0xFF2F9E6E); val PURPLE = Color(0xFF7048E8); val ORANGE = Color(0xFFF08C00)
+val BLUE = Color(0xFF1C7ED6); val TEAL = Color(0xFF0CA678); val RED = Color(0xFFE03131)
 
 class MainActivity : FragmentActivity() {
     lateinit var model: Model
     var locked by mutableStateOf(true)
     var changePin by mutableStateOf(false)
+    var editP by mutableStateOf<Period?>(null)
+    var delP by mutableStateOf<Period?>(null)
     val askNotif = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val exp = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { u ->
         u?.let { contentResolver.openOutputStream(it)?.use { o -> o.write(model.export().toByteArray()) } } }
@@ -139,11 +143,106 @@ class MainActivity : FragmentActivity() {
                 NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Text(t.take(2)) }, label = { Text(t.drop(3), fontSize = 11.sp) }) } }
         }) { pad -> Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(14.dp)) {
             when (tab) { 0 -> Home(); 1 -> Stats(); else -> Settings() } } }
+        editP?.let { EditDialog(it) }
+        delP?.let { p -> AlertDialog(onDismissRequest = { delP = null }, title = { Text("حذف دوره") },
+            text = { Text("همه‌ی اطلاعات این دوره (تاریخ‌ها، علائم، وزن، دما و دارو) برای همیشه حذف می‌شود. مطمئن هستید؟") },
+            confirmButton = { CBtn("بله، حذف شود", RED) { model.deletePeriod(p); delP = null } },
+            dismissButton = { TextButton({ delP = null }) { Text("انصراف") } }) }
     }
 
     @Composable fun Box2(content: @Composable ColumnScope.() -> Unit) = Card(Modifier.fillMaxWidth().padding(bottom = 12.dp), shape = RoundedCornerShape(20.dp)) { Column(Modifier.padding(16.dp), content = content) }
 
+    fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_LONG).show()
+    fun endAt(dn: Long): Boolean { val ok = model.endPeriod(dn); if (!ok) toast("ابتدا شروع پریود را (حداکثر ۱۴ روز قبل از این تاریخ) ثبت کنید"); return ok }
+    fun periodAt(dn: Long) = model.periods.firstOrNull { dn >= it.s && dn <= (it.e ?: (it.s + model.pl - 1)) }
+
+    @Composable fun CBtn(text: String, color: Color, modifier: Modifier = Modifier, fs: Int = 13, onClick: () -> Unit) {
+        Button(onClick, modifier, shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp, pressedElevation = 2.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 12.dp)) { Text(text, fontSize = fs.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+    }
+
+    @Composable fun Leg(label: String, color: Color, style: Int) {
+        Row(Modifier.padding(end = 12.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val shape = Modifier.size(if (style == 3) 7.dp else 13.dp).clip(CircleShape)
+            Box(when (style) { 1 -> shape.border(2.dp, color, CircleShape); 2 -> shape.background(color.copy(alpha = .3f)); else -> shape.background(color) })
+            Spacer(Modifier.width(5.dp)); Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+
+    @Composable fun Spin(label: String, value: String, up: () -> Unit, down: () -> Unit) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontSize = 11.sp); TextButton(up) { Text("▲") }
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PURPLE); TextButton(down) { Text("▼") } }
+    }
+
+    @Composable fun JalaliPicker(dn: Long, onChange: (Long) -> Unit) {
+        val (y, m, d) = jal(dn)
+        fun make(ny: Int, nm: Int, nd: Int): Long { val (st, len) = monthStart(ny, nm); return st + minOf(nd, len) - 1 }
+        val len = monthStart(y, m).second
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Spin("روز", fa(d), { onChange(make(y, m, if (d + 1 > len) 1 else d + 1)) }, { onChange(make(y, m, if (d - 1 < 1) len else d - 1)) })
+            Spin("ماه", MN[m - 1], { onChange(if (m == 12) make(y + 1, 1, d) else make(y, m + 1, d)) }, { onChange(if (m == 1) make(y - 1, 12, d) else make(y, m - 1, d)) })
+            Spin("سال", fa(y), { onChange(make(y + 1, m, d)) }, { onChange(make(y - 1, m, d)) })
+        }
+    }
+
     @OptIn(ExperimentalLayoutApi::class)
+    @Composable fun SymptomsContent(dn: Long) {
+        val tags = model.notes[dn] ?: emptySet()
+        Text("علائم", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TAGS.forEach { t -> FilterChip(selected = t in tags, onClick = { model.toggle(dn, t) }, label = { Text(t, fontSize = 12.sp) },
+                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ORANGE, selectedLabelColor = Color.White)) } }
+        Spacer(Modifier.height(8.dp)); VitFields(dn)
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable fun SymSheet(today: Long, close: () -> Unit) {
+        var day by remember { mutableLongStateOf(today) }
+        ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton({ day -= 1 }) { Text("› روز قبل") }
+                    Text("ثبت علائم · ${jdate(day)}", fontWeight = FontWeight.Bold, color = ORANGE)
+                    TextButton({ day += 1 }) { Text("روز بعد ‹") } }
+                SymptomsContent(day)
+                CBtn("تمام", ORANGE, Modifier.fillMaxWidth().padding(top = 12.dp), 14) { close() }
+            }
+        }
+    }
+
+    @Composable fun EndDialog(today: Long, close: () -> Unit) {
+        var pick by remember { mutableLongStateOf(today) }
+        AlertDialog(onDismissRequest = close, title = { Text("پایان پریود") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("پایان پریود را برای امروز یا یک تاریخ دلخواه ثبت کنید.", fontSize = 13.sp)
+                JalaliPicker(pick) { pick = it }
+                Text("تاریخ انتخابی: ${jdate(pick)}", fontSize = 12.sp, color = PURPLE, modifier = Modifier.padding(vertical = 6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CBtn("ثبت برای امروز", TEAL, Modifier.weight(1f), 12) { if (endAt(today)) close() }
+                    CBtn("ثبت تاریخ انتخابی", PURPLE, Modifier.weight(1f), 12) { if (endAt(pick)) close() } } } },
+            confirmButton = { TextButton(close) { Text("انصراف") } })
+    }
+
+    @Composable fun EditDialog(p: Period) {
+        var s by remember(p) { mutableLongStateOf(p.s) }
+        var hasEnd by remember(p) { mutableStateOf(p.e != null) }
+        var e by remember(p) { mutableLongStateOf(p.e ?: (p.s + model.pl - 1)) }
+        AlertDialog(onDismissRequest = { editP = null }, title = { Text("ویرایش دوره") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("تاریخ شروع: ${jdate(s)}", fontWeight = FontWeight.SemiBold, color = PINK)
+                JalaliPicker(s) { s = it }
+                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(hasEnd, { hasEnd = it }); Text("تاریخ پایان ثبت شود") }
+                if (hasEnd) { Text("تاریخ پایان: ${jdate(e)}", fontWeight = FontWeight.SemiBold, color = PURPLE); JalaliPicker(e) { e = it } } } },
+            confirmButton = { CBtn("ذخیره", TEAL) {
+                if (hasEnd && e < s) toast("تاریخ پایان نمی‌تواند قبل از شروع باشد")
+                else { model.editPeriod(p, s, if (hasEnd) e else null); editP = null } } },
+            dismissButton = { TextButton({ editP = null }) { Text("انصراف") } })
+    }
+
+    @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
     @Composable fun Home() {
         val today = remember { LocalDate.now().toEpochDay() }
         val c = model.calc(); val nx = c.next
@@ -165,9 +264,12 @@ class MainActivity : FragmentActivity() {
         val warn = (c.last != null && c.avg !in 21..35) || (c.cycles.size >= 2 && c.cycles.max() - c.cycles.min() > 9) || (nx != null && today - nx > 7)
         if (warn) Box2 { Text("⚠️ الگوی چرخه‌ی شما نامنظم به نظر می‌رسد. در صورت تکرار، با پزشک مشورت کنید.", fontSize = 13.sp) }
         var sel by remember { mutableStateOf<Long?>(null) }
+        var showEnd by remember { mutableStateOf(false) }
+        var symSheet by remember { mutableStateOf(false) }
         Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button({ model.startPeriod(today) }, Modifier.weight(1f)) { Text("شروع پریود امروز", fontSize = 13.sp) }
-            FilledTonalButton({ sel = today }, Modifier.weight(1f)) { Text("ثبت علائم امروز", fontSize = 13.sp) }
+            CBtn("شروع پریود", PINK, Modifier.weight(1f)) { model.startPeriod(today) }
+            CBtn("پایان پریود", PURPLE, Modifier.weight(1f)) { showEnd = true }
+            CBtn("ثبت علائم", ORANGE, Modifier.weight(1f)) { symSheet = true }
         }
         var vy by remember { mutableIntStateOf(jal(today).first) }; var vm by remember { mutableIntStateOf(jal(today).second) }
         Box2 {
@@ -180,28 +282,34 @@ class MainActivity : FragmentActivity() {
             val cells = List<Long?>(off) { null } + (0 until len).map { st + it }
             cells.chunked(7).forEach { row -> Row {
                 row.forEach { dn -> if (dn == null) Spacer(Modifier.weight(1f)) else {
-                    val bg = when { dn in c.per -> PINK; dn in c.ovu -> GREEN; dn in c.fert -> GREEN.copy(alpha = .22f); dn in c.pms -> PINK.copy(alpha = .15f); else -> Color.Transparent }
+                    val bg = when { dn in c.per -> PINK; dn in c.ovu -> GREEN; dn in c.fert -> GREEN.copy(alpha = .22f); dn in c.pms -> PURPLE.copy(alpha = .2f); else -> Color.Transparent }
                     val fg = if (dn in c.per || dn in c.ovu) Color.White else MaterialTheme.colorScheme.onSurface
                     var m = Modifier.weight(1f).padding(2.dp).aspectRatio(1f).clip(CircleShape).background(bg)
                     if (dn in c.pred && dn !in c.per) m = m.border(2.dp, PINK, CircleShape)
                     if (dn == today) m = m.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                    Box(m.clickable { sel = dn }, contentAlignment = Alignment.Center) { Text(fa(jal(dn).third) + if (model.notes[dn] != null) "·" else "", color = fg, fontSize = 14.sp) } } }
+                    Box(m.clickable { sel = dn }, contentAlignment = Alignment.Center) {
+                        Text(fa(jal(dn).third), color = fg, fontSize = 14.sp)
+                        if (model.notes[dn] != null || model.vit[dn] != null) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(5.dp).clip(CircleShape).background(ORANGE)) } } }
                 repeat(7 - row.size) { Spacer(Modifier.weight(1f)) } } }
-            Text("● پریود   ◌ پیش‌بینی   ◍ باروری/تخمک‌گذاری   · علائم   ◔ PMS", fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            FlowRow(Modifier.padding(top = 8.dp)) {
+                Leg("پریود", PINK, 0); Leg("پیش‌بینی پریود", PINK, 1); Leg("روزهای باروری", GREEN, 2)
+                Leg("تخمک‌گذاری", GREEN, 0); Leg("PMS", PURPLE, 2); Leg("علائم ثبت‌شده", ORANGE, 3)
+            }
         }
         sel?.let { dn ->
-            val inDay = model.periods.any { dn >= it.s && dn <= (it.e ?: (it.s + model.pl - 1)) }
-            val tags = model.notes[dn] ?: emptySet()
+            val pa = periodAt(dn)
             AlertDialog(onDismissRequest = { sel = null }, confirmButton = { TextButton({ sel = null }) { Text("بستن") } },
                 title = { Text(jdate(dn)) }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button({ model.startPeriod(dn) }) { Text("شروع پریود", fontSize = 12.sp) }
-                        FilledTonalButton({ model.endPeriod(dn) }) { Text("پایان پریود", fontSize = 12.sp) } }
-                    if (inDay) TextButton({ model.removeAt(dn) }) { Text("حذف این دوره‌ی پریود") }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TAGS.forEach { t -> FilterChip(selected = t in tags, onClick = { model.toggle(dn, t) }, label = { Text(t, fontSize = 12.sp) }) } }
-                    VitFields(dn) } })
+                        CBtn("شروع پریود", PINK, Modifier.weight(1f), 12) { model.startPeriod(dn) }
+                        CBtn("پایان پریود", PURPLE, Modifier.weight(1f), 12) { endAt(dn) } }
+                    if (pa != null) Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CBtn("ویرایش دوره", BLUE, Modifier.weight(1f), 12) { editP = pa; sel = null }
+                        CBtn("حذف دوره", RED, Modifier.weight(1f), 12) { delP = pa; sel = null } }
+                    SymptomsContent(dn) } })
         }
+        if (showEnd) EndDialog(today) { showEnd = false }
+        if (symSheet) SymSheet(today) { symSheet = false }
     }
 
     @Composable fun Stats() {
@@ -214,6 +322,12 @@ class MainActivity : FragmentActivity() {
             Row(Modifier.fillMaxWidth().height(130.dp).padding(top = 8.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 c.cycles.takeLast(8).forEach { v -> Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(fa(v), fontSize = 10.sp); Box(Modifier.fillMaxWidth().height((v * 2).dp).clip(RoundedCornerShape(6.dp)).background(PINK)) } } } }
+        Box2 { Text("دوره‌های ثبت‌شده", fontWeight = FontWeight.SemiBold)
+            if (model.periods.isEmpty()) Text("هنوز دوره‌ای ثبت نشده", fontSize = 12.sp)
+            model.periods.sortedByDescending { it.s }.forEach { p ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(jdate(p.s) + (p.e?.let { " تا ${jdate(it)}" } ?: " (بدون پایان)"), Modifier.weight(1f), fontSize = 13.sp)
+                    CBtn("ویرایش", BLUE, fs = 12) { editP = p }; Spacer(Modifier.width(6.dp)); CBtn("حذف", RED, fs = 12) { delP = p } } } }
         val freq = model.notes.values.flatten().groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(5)
         Box2 { Text("علائم تکرارشونده", fontWeight = FontWeight.SemiBold)
             if (freq.isEmpty()) Text("هنوز علائمی ثبت نشده", fontSize = 12.sp)
@@ -247,15 +361,15 @@ class MainActivity : FragmentActivity() {
         Box2 { Text("امنیت", fontWeight = FontWeight.SemiBold)
             Sw("نمایش جزئیات در ویجت", "wdet", "پیش‌فرض: ویجت فقط نام برنامه را نشان می‌دهد")
             Sw("ورود با اثر انگشت", "bio", if (canBio()) null else "روی این دستگاه در دسترس نیست", canBio())
-            OutlinedButton({ changePin = true }, Modifier.fillMaxWidth()) { Text("تغییر رمز ورود") }
-            OutlinedButton({ locked = true }, Modifier.fillMaxWidth()) { Text("قفل کردن برنامه") }
+            CBtn("تغییر رمز ورود", BLUE, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { changePin = true }
+            CBtn("قفل کردن برنامه", PURPLE, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { locked = true }
             Text("اطلاعات روی دستگاه رمزنگاری‌شده ذخیره می‌شود و برنامه از اسکرین‌شات و پیش‌نمایش برنامه‌های اخیر محافظت شده است.", fontSize = 11.sp) }
         Box2 { Text("اطلاعات", fontWeight = FontWeight.SemiBold)
-            OutlinedButton({ pdf.launch("roozshomar-report.pdf") }, Modifier.fillMaxWidth()) { Text("گزارش PDF برای پزشک") }
-            OutlinedButton({ sharePartner() }, Modifier.fillMaxWidth()) { Text("اشتراک پیش‌بینی با همسر (فقط تاریخ‌ها)") }
-            OutlinedButton({ exp.launch("roozshomar-backup.json") }, Modifier.fillMaxWidth()) { Text("گرفتن نسخه‌ی پشتیبان") }
-            OutlinedButton({ imp.launch(arrayOf("application/json", "*/*")) }, Modifier.fillMaxWidth()) { Text("بازیابی از نسخه‌ی پشتیبان") }
-            TextButton({ wipe = true }, Modifier.fillMaxWidth()) { Text("حذف همه‌ی اطلاعات", color = MaterialTheme.colorScheme.error) } }
+            CBtn("گزارش PDF برای پزشک", TEAL, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { pdf.launch("roozshomar-report.pdf") }
+            CBtn("اشتراک پیش‌بینی با همسر (فقط تاریخ‌ها)", BLUE, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { sharePartner() }
+            CBtn("گرفتن نسخه‌ی پشتیبان", GREEN, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { exp.launch("roozshomar-backup.json") }
+            CBtn("بازیابی از نسخه‌ی پشتیبان", ORANGE, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { imp.launch(arrayOf("application/json", "*/*")) }
+            CBtn("حذف همه‌ی اطلاعات", RED, Modifier.fillMaxWidth().padding(vertical = 3.dp), 14) { wipe = true } }
         Text("پیش‌بینی‌ها تخمینی‌اند و جایگزین مشورت پزشکی نیستند.", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         if (wipe) AlertDialog(onDismissRequest = { wipe = false },
             confirmButton = { TextButton({ model.wipe(); wipe = false; locked = true }) { Text("حذف") } },

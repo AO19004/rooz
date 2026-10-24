@@ -85,7 +85,14 @@ class Model(ctx: Context) {
         if (dn - p.s > 14) return false
         periods = periods.map { if (it == p) Period(p.s, dn) else it }; save(); return true
     }
-    fun removeAt(dn: Long) { periods = periods.filterNot { dn >= it.s && dn <= (it.e ?: (it.s + pl - 1)) }; save() }
+    fun editPeriod(old: Period, s: Long, e: Long?) { periods = (periods - old + Period(s, e)).sortedBy { it.s }; save() }
+    fun deletePeriod(p: Period) {
+        val e = p.e ?: (p.s + pl - 1); val r = p.s..e
+        periods = periods - p
+        notes = notes.filterKeys { it !in r }
+        vit = vit.filterKeys { it !in r }
+        save()
+    }
     fun toggle(dn: Long, t: String) {
         val cur = notes[dn] ?: emptySet(); val n = if (t in cur) cur - t else cur + t
         notes = if (n.isEmpty()) notes - dn else notes + (dn to n); save()
