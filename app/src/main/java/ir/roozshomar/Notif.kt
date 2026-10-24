@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 
 class DailyWorker(c: Context, p: WorkerParameters) : Worker(c, p) {
     override fun doWork(): Result {
-        try { Notif.run(applicationContext, inputData.getString("k") ?: "m") } catch (e: Exception) {}
+        try { if (inputData.getString("k") == "r") Notif.runRem(applicationContext, inputData.getLong("id", -1L)) else Notif.run(applicationContext, inputData.getString("k") ?: "m") } catch (e: Exception) {}
         try { Widget.refresh(applicationContext) } catch (e: Exception) {}
         return Result.success()
     }
@@ -35,6 +35,21 @@ object Notif {
             WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(name, ExistingPeriodicWorkPolicy.KEEP, req)
         }
         go("rz_m", 9, "m"); go("rz_e", 21, "e")
+    }
+
+    fun scheduleRem(ctx: Context, r: Rem) {
+        val at = LocalDate.ofEpochDay(r.dn).atTime(r.hm / 60, r.hm % 60)
+        val delay = Duration.between(LocalDateTime.now(), at).toMillis()
+        if (delay <= 0) return
+        val req = OneTimeWorkRequestBuilder<DailyWorker>().setInitialDelay(delay, TimeUnit.MILLISECONDS)
+            .setInputData(workDataOf("k" to "r", "id" to r.id)).build()
+        WorkManager.getInstance(ctx).enqueueUniqueWork("rem_${r.id}", ExistingWorkPolicy.KEEP, req)
+    }
+    fun cancelRem(ctx: Context, id: Long) { WorkManager.getInstance(ctx).cancelUniqueWork("rem_$id") }
+    fun runRem(ctx: Context, id: Long) {
+        val m = Model(ctx); if (!m.f("master") || !m.f("rem")) return
+        val r = m.rems.firstOrNull { it.id == id } ?: return
+        post(ctx, 1000 + (id % 100000).toInt(), "یادآور", r.text, m)
     }
 
     private fun post(ctx: Context, id: Int, title: String, text: String, m: Model) {

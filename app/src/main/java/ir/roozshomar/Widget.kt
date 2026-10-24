@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.view.View
 import android.widget.RemoteViews
 import java.time.LocalDate
 
@@ -26,6 +27,9 @@ object Widget {
             else -> "تاخیر" to "${fa((today - nx).toInt())} روز"
         }
         rv.setTextViewText(R.id.t1, a); rv.setTextViewText(R.id.t2, b)
+        val tr = m.rems.filter { it.dn == today }.sortedBy { it.hm }
+        rv.setTextViewText(R.id.t3, if (tr.isEmpty()) "" else if (m.f("wdet")) "🔔 " + tr.joinToString("، ") { it.text } else "🔔 یادآور دارید")
+        rv.setViewVisibility(R.id.t3, if (tr.isEmpty()) View.GONE else View.VISIBLE)
         rv.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(c, 0, Intent(c, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
         return rv
     }

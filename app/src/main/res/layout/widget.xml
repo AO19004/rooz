@@ -3,4 +3,5 @@
  android:gravity="center" android:padding="12dp" android:background="#D6336C">
  <TextView android:id="@+id/t1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="12sp"/>
  <TextView android:id="@+id/t2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold"/>
+ <TextView android:id="@+id/t3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:maxLines="2" android:textColor="#FFE3EC" android:textSize="11sp"/>
 </LinearLayout>

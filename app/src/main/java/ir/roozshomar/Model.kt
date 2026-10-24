@@ -14,7 +14,7 @@ import kotlin.math.roundToInt
 
 val MN = listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 val TAGS = listOf("درد شکم","کمردرد","سردرد","نفخ","بی‌حالی","تغییر خلق","جوش","هوس خوراکی","حال خوب","خونریزی کم","خونریزی متوسط","خونریزی زیاد")
-val FL = listOf("master","period","ovu","log","tips","discreet","bio","pms","wdet")
+val FL = listOf("master","period","ovu","log","tips","discreet","bio","pms","wdet","rem")
 fun fa(n: Int) = n.toString().map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")
 
 private val UTC = TimeZone.getTimeZone("UTC")
@@ -31,6 +31,7 @@ fun monthStart(y: Int, m: Int): Pair<Long, Int> {
 
 data class Period(val s: Long, val e: Long?)
 data class Vit(val w: String, val t: String, val med: String)
+data class Rem(val id: Long, val dn: Long, val hm: Int, val text: String)
 class Calc(val per: Set<Long>, val pred: Set<Long>, val fert: Set<Long>, val ovu: Set<Long>,
            val avg: Int, val last: Long?, val next: Long?, val cycles: List<Int>, val pms: Set<Long>)
 
@@ -46,6 +47,9 @@ class Model(ctx: Context) {
     var pl by mutableStateOf(5); private set
     var vit by mutableStateOf(mapOf<Long, Vit>()); private set
     var mode by mutableStateOf("normal"); private set
+    var rems by mutableStateOf(listOf<Rem>()); private set
+    var dnotes by mutableStateOf(mapOf<Long, String>()); private set
+    var custom by mutableStateOf(listOf<String>()); private set
     val flags = mutableStateMapOf<String, Boolean>()
     init { load() }
 
@@ -62,6 +66,10 @@ class Model(ctx: Context) {
             cy = j.optInt("cy", 28); pl = j.optInt("pl", 5)
             val vo = j.optJSONObject("v")
             vit = vo?.keys()?.asSequence()?.associate { k -> val a = vo.getJSONArray(k); k.toLong() to Vit(a.getString(0), a.getString(1), a.getString(2)) } ?: mapOf()
+            val ra = j.optJSONArray("r") ?: JSONArray()
+            rems = (0 until ra.length()).map { val a = ra.getJSONArray(it); Rem(a.getLong(0), a.getLong(1), a.getInt(2), a.getString(3)) }
+            val no = j.optJSONObject("dn"); dnotes = no?.keys()?.asSequence()?.associate { k -> k.toLong() to no.getString(k) } ?: mapOf()
+            val ca = j.optJSONArray("cs") ?: JSONArray(); custom = (0 until ca.length()).map { ca.getString(it) }
         } catch (e: Exception) {}
         FL.forEach { flags[it] = sp.getBoolean("f_$it", it !in setOf("discreet", "bio", "wdet")) }
         mode = sp.getString("mode", "normal") ?: "normal"
@@ -72,6 +80,9 @@ class Model(ctx: Context) {
         j.put("n", JSONObject(notes.entries.associate { it.key.toString() to JSONArray(it.value.toList()) }))
         j.put("cy", cy); j.put("pl", pl)
         j.put("v", JSONObject(vit.entries.associate { it.key.toString() to JSONArray(listOf(it.value.w, it.value.t, it.value.med)) }))
+        j.put("r", JSONArray(rems.map { JSONArray(listOf(it.id, it.dn, it.hm.toLong(), it.text)) }))
+        j.put("dn", JSONObject(dnotes.entries.associate { it.key.toString() to it.value }))
+        j.put("cs", JSONArray(custom))
         sp.edit().putString("data", j.toString()).apply(); try { Widget.refresh(app) } catch (e: Exception) {}
     }
     fun setVit(dn: Long, v: Vit) { vit = if (v.w.isBlank() && v.t.isBlank() && v.med.isBlank()) vit - dn else vit + (dn to v); save() }
@@ -85,12 +96,21 @@ class Model(ctx: Context) {
         if (dn - p.s > 14) return false
         periods = periods.map { if (it == p) Period(p.s, dn) else it }; save(); return true
     }
+    fun addRem(dn: Long, hm: Int, text: String): Rem { val r = Rem(System.currentTimeMillis(), dn, hm, text); rems = rems + r; save(); return r }
+    fun delRem(id: Long) { rems = rems.filterNot { it.id == id }; save() }
+    fun setDnote(dn: Long, t: String) { dnotes = if (t.isBlank()) dnotes - dn else dnotes + (dn to t); save() }
+    fun addCustom(name: String, dn: Long) {
+        if (name !in TAGS && name !in custom) custom = custom + name
+        if (name !in (notes[dn] ?: emptySet())) toggle(dn, name) else save()
+    }
+    fun removeCustom(name: String) { custom = custom - name; notes = notes.mapValues { it.value - name }.filterValues { it.isNotEmpty() }; save() }
     fun editPeriod(old: Period, s: Long, e: Long?) { periods = (periods - old + Period(s, e)).sortedBy { it.s }; save() }
     fun deletePeriod(p: Period) {
         val e = p.e ?: (p.s + pl - 1); val r = p.s..e
         periods = periods - p
         notes = notes.filterKeys { it !in r }
         vit = vit.filterKeys { it !in r }
+        dnotes = dnotes.filterKeys { it !in r }
         save()
     }
     fun toggle(dn: Long, t: String) {
@@ -101,7 +121,7 @@ class Model(ctx: Context) {
     fun hasPin() = sp.contains("pin")
     fun setPin(p: String) { sp.edit().putString("pin", h(p)).apply() }
     fun check(p: String) = sp.getString("pin", null) == h(p)
-    fun wipe() { sp.edit().clear().apply(); periods = listOf(); notes = mapOf(); cy = 28; pl = 5; vit = mapOf(); load() }
+    fun wipe() { sp.edit().clear().apply(); periods = listOf(); notes = mapOf(); cy = 28; pl = 5; vit = mapOf(); rems = listOf(); dnotes = mapOf(); custom = listOf(); load() }
 
     fun calc(): Calc {
         val ps = periods.sortedBy { it.s }
