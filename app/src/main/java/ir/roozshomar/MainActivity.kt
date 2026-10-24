@@ -239,7 +239,7 @@ class MainActivity : FragmentActivity() {
             Sw("اعلان مخفی", "discreet", "متن اعلان‌ها عمومی نمایش داده می‌شود", m) }
         Box2 { Text("حالت استفاده", fontWeight = FontWeight.SemiBold)
             listOf("normal" to "عادی (پیگیری چرخه)", "try" to "تلاش برای بارداری", "preg" to "بارداری").forEach { (k, l) ->
-                Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(model.mode == k, { model.setMode(k) }); Text(l) } }
+                Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(model.mode == k, { model.changeMode(k) }); Text(l) } }
             if (model.mode == "preg") Text("آخرین پریود ثبت‌شده مبنای هفته‌ی بارداری است و یادآوری‌های پریود متوقف می‌شود.", fontSize = 11.sp) }
         Box2 { Text("چرخه", fontWeight = FontWeight.SemiBold)
             Stepper("طول چرخه", model.cy) { model.setLens(it, model.pl) }

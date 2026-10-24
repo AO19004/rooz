@@ -75,7 +75,7 @@ class Model(ctx: Context) {
         sp.edit().putString("data", j.toString()).apply(); try { Widget.refresh(app) } catch (e: Exception) {}
     }
     fun setVit(dn: Long, v: Vit) { vit = if (v.w.isBlank() && v.t.isBlank() && v.med.isBlank()) vit - dn else vit + (dn to v); save() }
-    fun setMode(s: String) { mode = s; sp.edit().putString("mode", s).apply(); Widget.refresh(app) }
+    fun changeMode(s: String) { mode = s; sp.edit().putString("mode", s).apply(); Widget.refresh(app) }
     fun export(): String = sp.getString("data", "{}") ?: "{}"
     fun import(s: String) { try { JSONObject(s); sp.edit().putString("data", s).apply(); load() } catch (e: Exception) {} }
     fun setLens(c: Int, p: Int) { cy = c.coerceIn(20, 45); pl = p.coerceIn(2, 10); save() }
