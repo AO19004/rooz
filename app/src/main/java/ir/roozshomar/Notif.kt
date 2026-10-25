@@ -43,7 +43,7 @@ object Notif {
         if (delay <= 0) return
         val req = OneTimeWorkRequestBuilder<DailyWorker>().setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .setInputData(workDataOf("k" to "r", "id" to r.id)).build()
-        WorkManager.getInstance(ctx).enqueueUniqueWork("rem_${r.id}", ExistingWorkPolicy.KEEP, req)
+        WorkManager.getInstance(ctx).enqueueUniqueWork("rem_${r.id}", ExistingWorkPolicy.REPLACE, req)
     }
     fun cancelRem(ctx: Context, id: Long) { WorkManager.getInstance(ctx).cancelUniqueWork("rem_$id") }
     fun runRem(ctx: Context, id: Long) {

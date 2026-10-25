@@ -97,6 +97,10 @@ class Model(ctx: Context) {
         periods = periods.map { if (it == p) Period(p.s, dn) else it }; save(); return true
     }
     fun addRem(dn: Long, hm: Int, text: String): Rem { val r = Rem(System.currentTimeMillis(), dn, hm, text); rems = rems + r; save(); return r }
+    fun editRem(id: Long, hm: Int, text: String): Rem? {
+        var n: Rem? = null
+        rems = rems.map { if (it.id == id) it.copy(hm = hm, text = text).also { x -> n = x } else it }; save(); return n
+    }
     fun delRem(id: Long) { rems = rems.filterNot { it.id == id }; save() }
     fun setDnote(dn: Long, t: String) { dnotes = if (t.isBlank()) dnotes - dn else dnotes + (dn to t); save() }
     fun addCustom(name: String, dn: Long) {
